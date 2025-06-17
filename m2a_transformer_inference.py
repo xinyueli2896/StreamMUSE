@@ -9,7 +9,7 @@ import torch
 import pretty_midi
 import os
 import argparse
-
+import json
 def decode_output(outputs, save_path, tempo=120.0, prompt=True, single=False):
     midi = pretty_midi.PrettyMIDI(initial_tempo=tempo)
     time_step_length = 60.0 / tempo / 4
@@ -115,11 +115,15 @@ def continuation(model, midi_path, prompt_length=100, generation_length=384, tem
     with torch.no_grad():
         x = x.repeat(n_samples, 1, 1)
         x_mel_gt = x_mel_gt.repeat(n_samples, 1, 1)
+        import time
+        start_time = time.time()
         if prompt_length == 0:
             output = model.global_sampling_from_scratch(x_mel_gt, temperature=temperature, max_seq_len=generation_length)
         else:
             output = model.global_sampling(x, x_mel_gt=x_mel_gt if gt_mel else None, temperature=temperature, max_seq_len=generation_length)
-
+        end_time = time.time()
+        print(f"Generation time: {end_time - start_time:.2f} seconds")
+    
     for i in range(n_samples):
         output_i = [output[j][i:i + 1, :] for j in range(len(output))]
         decode_output(output_i, f'temp/{model.save_name}/prompt{prompt_length}/{os.path.basename(midi_path)}_temp{temperature}_{i}.mid', tempo=90.0)
