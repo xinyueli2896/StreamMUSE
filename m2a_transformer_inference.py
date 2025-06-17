@@ -1,7 +1,9 @@
 import numpy as np
 
 from m2a_transformer import RoFormerSymbolicTransformer, SOS_TOKEN, EOS_TOKEN, PAD_TOKEN
-from preprocess_large_midi_dataset_private import preprocess_midi, DURATION_TEMPLATES
+# from preprocess_large_midi_dataset_private import preprocess_midi, DURATION_TEMPLATES
+from preprocess_large_midi_dataset import preprocess_midi, DURATION_TEMPLATES
+
 from settings import RWC_DATASET_PATH
 import torch
 import pretty_midi
@@ -70,7 +72,22 @@ def decompress(model, byte_arr_mel, byte_arr_acc):
     return model.preprocess(x, pitch_shift=torch.zeros(1, dtype=torch.int8).cuda(), y=y)
 
 def continuation(model, midi_path, prompt_length=100, generation_length=384, temperature=1.0, n_samples=1, gt_mel=True):
-    x_mel, x_acc = decompress(model, preprocess_midi(midi_path, 4)[0], preprocess_midi(midi_path.replace('mel', 'acc'), 4)[0])
+    if os.path.isfile(midi_path):
+        pass
+    else:
+        print(f"Error: {midi_path} is not a valid file.")
+    byte_arr_mel = preprocess_midi(midi_path, 4)
+    byte_arr_acc = preprocess_midi(midi_path.replace('mel', 'acc'), 4)
+
+    if byte_arr_mel is None:
+        print(f"Error: preprocess_midi returned None for mel file: {midi_path}")
+        return  # Skip this MIDI file
+    if byte_arr_acc is None:
+        print(f"Error: preprocess_midi returned None for acc file: {midi_path.replace('mel', 'acc')}")
+        return  # Skip this MIDI file
+
+    x_mel, x_acc = decompress(model, byte_arr_mel[0], byte_arr_acc[0])
+    
     if prompt_length==0:
         B, S, L = x_mel.shape
         valid = (x_mel != EOS_TOKEN) & (x_mel != PAD_TOKEN)  # [B, S, L]，True 表示该 token 有效
@@ -127,7 +144,7 @@ if __name__ == '__main__':
     model.save_name = os.path.basename(model_path)
     model.cuda()
     model.eval()
-    for midi in os.listdir('/home/coder/laopo/StreamMUSE/input/mel'):
+    for midi in os.listdir('input/mel'):
         if midi.endswith('mid'):
-            midi = os.path.join('/home/coder/laopo/StreamMUSE/input/mel', midi)
+            midi = os.path.join('input/mel', midi)
             continuation(model, midi, temperature=args.temperature, generation_length=384, n_samples=args.n_samples, prompt_length=args.prompt_len, gt_mel=True)

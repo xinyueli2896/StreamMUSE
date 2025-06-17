@@ -45,7 +45,8 @@ def preprocess_midi(midi_path, max_polyphony, beat_div=4, ins_ids='all'):
     # print(midi_path)
     try:
         midi = xf_midi.XFMidi(midi_path, constant_tempo=60.0 / beat_div)
-    except:
+    except Exception as e:
+        print(f"Error processing {midi_path}: Invalid MIDI file. Error: {e}")
         return None
     # print(midi)
     midi_end_time = int(midi.get_end_time())
