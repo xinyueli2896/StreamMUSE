@@ -12,3 +12,8 @@ preprocess_large_midi_dataset_private.py
 cp_transformer_pt_inference.py
 cp_transformer_pt.py
 m2a_transformer_inference_copy.py
+new.mid
+performance.mid 
+test.mid
+test.py
+/samples

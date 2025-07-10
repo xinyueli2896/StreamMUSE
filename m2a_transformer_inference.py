@@ -70,6 +70,7 @@ def decompress(model, byte_arr_mel, byte_arr_acc):
     return model.preprocess(x, pitch_shift=torch.zeros(1, dtype=torch.int8).cuda(), y=y)
 
 def continuation(model, midi_path, prompt_length=100, generation_length=384, temperature=1.0, n_samples=1, gt_mel=True):
+    # tensor_to_midi(preprocess_midi(midi_path, 4)[0], 'mel.mid')
     x_mel, x_acc = decompress(model, preprocess_midi(midi_path, 4)[0], preprocess_midi(midi_path.replace('mel', 'acc'), 4)[0])
     if prompt_length==0:
         B, S, L = x_mel.shape
@@ -82,7 +83,7 @@ def continuation(model, midi_path, prompt_length=100, generation_length=384, tem
         first_timestep = 1
     if not gt_mel:
         decode_output([x_mel[:, i, :] for i in range(x_mel.shape[1])],
-                    f'temp/{model.save_name}/{os.path.basename(midi_path)}_originalmelody.mid', single=True, tempo=90.0)
+                    f'temp/{model.save_name}/{os.path.basename(midi_path)}_originalmelody.mid', single=True, tempo=120.0)
     x_mel_gt = x_mel.clone()
     x_mel_gt = x_mel_gt[:, first_timestep-1+prompt_length:]
     x_mel = x_mel[:, :prompt_length]
@@ -93,7 +94,7 @@ def continuation(model, midi_path, prompt_length=100, generation_length=384, tem
 
     if prompt_length!=0:
         decode_output([x[:, i, :] for i in range(x.shape[1])],
-                    f'temp/{model.save_name}/{os.path.basename(midi_path)}_promptlen{prompt_length}.mid', tempo=90.0)
+                    f'temp/{model.save_name}/{os.path.basename(midi_path)}_promptlen{prompt_length}.mid', tempo=120.0)
 
     with torch.no_grad():
         x = x.repeat(n_samples, 1, 1)
@@ -105,7 +106,7 @@ def continuation(model, midi_path, prompt_length=100, generation_length=384, tem
 
     for i in range(n_samples):
         output_i = [output[j][i:i + 1, :] for j in range(len(output))]
-        decode_output(output_i, f'temp/{model.save_name}/prompt{prompt_length}/{os.path.basename(midi_path)}_temp{temperature}_{i}.mid', tempo=90.0)
+        decode_output(output_i, f'temp/{model.save_name}/prompt{prompt_length}/{os.path.basename(midi_path)}_temp{temperature}_{i}.mid', tempo=120.0)
 
 
 if __name__ == '__main__':
@@ -128,6 +129,6 @@ if __name__ == '__main__':
     model.cuda()
     model.eval()
     for midi in os.listdir('/home/coder/laopo/StreamMUSE/input/mel'):
-        if midi.endswith('mid'):
+        if midi.endswith('.mid'):
             midi = os.path.join('/home/coder/laopo/StreamMUSE/input/mel', midi)
             continuation(model, midi, temperature=args.temperature, generation_length=384, n_samples=args.n_samples, prompt_length=args.prompt_len, gt_mel=True)

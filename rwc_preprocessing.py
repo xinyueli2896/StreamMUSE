@@ -7,7 +7,7 @@ import json
 from tqdm import tqdm
 np.int = int
 from mir_eval.chord import encode, rotate_bitmap_to_root
-
+import torch
 def chord_to_midi(chord_str, bass_starting_pitch=36):
     root_number, semitone_bitmap, bass_number = encode(chord_str)
     if root_number < 0:
@@ -125,7 +125,76 @@ def create_rwc_chord_dataset():
         if file.endswith('.TXT'):
             midi_path = os.path.join(RWC_DATASET_PATH, 'AIST.RWC-MDB-P-2001.SMF_SYNC', file[:-15] + '.SMF_SYNC.MID')
             add_chord_track(midi_path, os.path.join(chord_lab_path, file), os.path.join(output_path, file[:-15] + '.mid'))
+def pitches_to_chroma(pitches, normalize=False):
+    chroma = np.zeros(12, dtype=np.float32)
+    for p in pitches:
+        pc = p % 12
+        chroma[pc] = 1
 
+    chroma = torch.tensor(chroma, dtype=torch.uint8)
+    return chroma
+def create_chord_chroma(midi_path, chord_lab_path,  subbeat_div=4, shift=0):
+    midi = pretty_midi.PrettyMIDI(midi_path)
+    beat_path = os.path.join(f"/home/coder/laopo/data/POP909-Dataset/POP909/{os.path.basename(midi_path)[:3]}", "beat_midi.txt")
+    print(f"reading from {beat_path}")
+    f = open(beat_path, 'r')
+    lines = [line.strip() for line in f.readlines() if line.strip()]
+    f.close()
+
+    beat_time = [float(i.split(' ')[0]) for i in lines]
+    y = np.arange(len(beat_time)) * subbeat_div
+
+    def performance_to_score(perf_time):
+        return np.interp(perf_time, beat_time, y)
+    # score_midi = xf_midi.XFMidi(midi_path, constant_tempo=60/subbeat_div)
+    # midi_end_time = int(score_midi.get_end_time())
+    midi_end_time = int(performance_to_score(midi.get_end_time()))
+
+    # print(midi_end_time)
+    # beat_time = performance_midi.get_beats()
+    # print(beat_time)
+    # downbeat_time = performance_midi.get_downbeats()
+    downbeat_time = beat_time[::2]
+    # print(downbeat_time)
+    # interpolate to get subbeat time
+    n_beats = len(beat_time)
+    subbeat_indices = np.arange((n_beats - 1) * subbeat_div + 1) / subbeat_div
+    subbeat_time = np.interp(subbeat_indices, np.arange(n_beats), beat_time)
+    subbeat_time_boundaries = (subbeat_time[:-1] + subbeat_time[1:]) / 2
+    chord_track = pretty_midi.Instrument(program=0)
+    drum_track = create_drum_track(beat_time, downbeat_time, subbeat_time_boundaries, 60.0 / 120 / subbeat_div)
+    if chord_lab_path is not None:
+        f = open(chord_lab_path, 'r')
+        lines = [line.strip() for line in f.readlines() if line.strip()]
+        f.close()
+    else:
+        lines = []  # no chord labels
+    def quantize_time(time):
+        return np.searchsorted(subbeat_time_boundaries, time)
+    quantized_downbeats = quantize_time(downbeat_time)
+    quantized_downbeats = np.concatenate([[-np.inf], quantized_downbeats, [np.inf]])
+    chromas = torch.zeros((midi_end_time, 12), dtype=torch.uint8)
+    # print(chromas)
+    for line in lines:
+        start_time, end_time, chord = line.split('\t')
+        start_time = float(start_time)
+        end_time = float(end_time)
+        # print(start_time)
+        start_time_quantized = quantize_time(start_time)
+        end_time_quantized = quantize_time(end_time)
+        pitches = chord_to_midi(chord)
+        chroma = pitches_to_chroma(pitches)
+        # separate chords at downbeats
+        start_downbeat_id = np.searchsorted(quantized_downbeats, start_time_quantized)
+        end_downbeat_id = np.searchsorted(quantized_downbeats, end_time_quantized)
+        for downbeat_id in range(start_downbeat_id, end_downbeat_id + 1):
+            s = max(start_time_quantized, quantized_downbeats[downbeat_id - 1])
+            e = min(end_time_quantized, quantized_downbeats[downbeat_id])
+            if s >= e:
+                continue
+            # print(s, e)    
+            chromas[int(s):int(e), :] = chroma
+    return chromas
 def find_files_starting_with(prefix, directory):
     for root, dirs, files in os.walk(directory):
         for file in files:

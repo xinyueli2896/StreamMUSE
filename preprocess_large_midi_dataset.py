@@ -8,7 +8,8 @@ import shutil
 import json
 import pretty_midi
 import argparse
-
+import pdb
+import math
 tokenize_dict = {'<sos>': 0, '<eos>': 1, '<pad>': 2}
 tokenize_count = [-1, -1, -1]
 
@@ -40,16 +41,42 @@ def update_token_dict(midi_path, beat_div=4):
                     tokenize_dict[key] = len(tokenize_dict)
                     tokenize_count.append(0)
                 tokenize_count[tokenize_dict[key]] += 1
-
+def resample_linear(arr: np.ndarray, new_len: int) -> np.ndarray:
+    """
+    Linearly resample `arr` (1D) to length `new_len`, returning a new array.
+    """
+    N = arr.shape[0]
+    # old indices: 0,1,...,N-1
+    x_old = np.arange(N)
+    # new indices: N points evenly spaced from 0 to N-1
+    x_new = np.linspace(0, N-1, new_len)
+    # interpolate
+    return np.interp(x_new, x_old, arr)
 def preprocess_midi(midi_path, max_polyphony, beat_div=4, ins_ids='all'):
     # print(midi_path)
     try:
-        midi = xf_midi.XFMidi(midi_path, constant_tempo=60.0 / beat_div)
-    except:
+        # midi = xf_midi.XFMidi(midi_path, constant_tempo=60.0 / beat_div)
+        midi = pretty_midi.PrettyMIDI(midi_path)
+        beat_path = os.path.join(f"/home/coder/laopo/data/POP909-Dataset/POP909/{os.path.basename(midi_path)[:3]}", "beat_midi.txt")
+        print(f"reading from {beat_path}")
+        f = open(beat_path, 'r')
+        lines = [line.strip() for line in f.readlines() if line.strip()]
+        f.close()
+        # wrong_x = midi.get_beats()
+    
+        x = [float(i.split(' ')[0]) for i in lines]
+        # print(x)
+        y = np.arange(len(x)) * beat_div
+        # [0, 1, 2]s -> [0, 4, 8]frame
+        def performance_to_score(perf_time):
+            return np.interp(perf_time, x, y)
+    except Exception as e:
+        print(e)
         return None
-    # print(midi)
-    midi_end_time = int(midi.get_end_time())
-    # print("midi_end_time:",midi_end_time)
+
+
+    # midi_end_time = int(midi.get_end_time())
+    midi_end_time = int(performance_to_score(midi.get_end_time()))
     # print(midi_end_time)
     if midi_end_time <= 0:
         return None
@@ -71,8 +98,11 @@ def preprocess_midi(midi_path, max_polyphony, beat_div=4, ins_ids='all'):
             if ins.is_drum:
                 program = 127
             for note in ins.notes:
-                start_time = int(round(note.start))
-                end_time = int(round(note.end))
+                start_time = int(round(performance_to_score(note.start)))
+                end_time = int(round(performance_to_score(note.end)))
+                # print(f"note.start is {note.start} convert to {start_time}")
+                # start_time = int(round(note.start))
+                # end_time = int(round(note.end))
                 if start_time >= 0 and end_time < midi_end_time and polyphony_counts[start_time] < max_polyphony:
                     if ins.is_drum:
                         duration = 0
@@ -187,7 +217,7 @@ def tensor_to_midi(
             )
 
     # 4) write file
-    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    # os.makedirs(os.path.dirname(save_path), exist_ok=True)
     pm.write(save_path)
 
 def create_tokenize_dict(folder):
@@ -323,26 +353,32 @@ def create_tensor(dataset_name, folders, max_polyphony=4):
     return paths
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="process midi folder(s) into usable tensors for the task")
+    tensor = preprocess_midi("/home/coder/laopo/data/POP909-Dataset/acc/005.mid", 4)[0]
+    print(tensor)
+    tensor_to_midi(tensor, 'corrected_005.mid')
+
+    # parser = argparse.ArgumentParser(description="process midi folder(s) into usable tensors for the task")
     
-    # Positional arguments
-    parser.add_argument("--name",type=str,help="name your dataset")
-    parser.add_argument("--folders",nargs='+', type=str, help="paths to midi folders")
-    parser.add_argument("--polyphony",type=int,default=4,help="maximum number of notes allowed in one timestep")
+    # # Positional arguments
+    # parser.add_argument("--name",type=str,help="name your dataset")
+    # parser.add_argument("--folders",nargs='+', type=str, help="paths to midi folders")
+    # parser.add_argument("--polyphony",type=int,default=4,help="maximum number of notes allowed in one timestep")
 
-    args = parser.parse_args()
+    # args = parser.parse_args()
 
-    melody_f = [os.path.join(f, 'mel') for f in args.folders]
-    accomp_f = [os.path.join(f, 'acc') for f in args.folders]
-    melody_n = args.name+'_mel'
-    accomp_n = args.name+'_acc'
+    # melody_f = [os.path.join(f, 'mel') for f in args.folders]
+    # accomp_f = [os.path.join(f, 'acc') for f in args.folders]
+    # melody_n = args.name+'_mel'
+    # accomp_n = args.name+'_acc'
 
-    paths_m = create_tensor(melody_n, melody_f, max_polyphony=args.polyphony)
-    paths_a = create_tensor(accomp_n, accomp_f, max_polyphony=args.polyphony)
+    # paths_m = create_tensor(melody_n, melody_f, max_polyphony=args.polyphony)
+    # paths_a = create_tensor(accomp_n, accomp_f, max_polyphony=args.polyphony)
     
-    sync(paths_m, paths_a)
+    # sync(paths_m, paths_a)
 
-
-        
+    # length = torch.load('/home/coder/laopo/StreamMUSE/data/909_cp4_v2_mel.length.pt')
+    # print(length)
+    # length = torch.load('/home/coder/laopo/StreamMUSE/data/909correct_mel_cp4.length.pt')
+    # print(length)
 
     

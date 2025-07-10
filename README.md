@@ -60,7 +60,8 @@ The output tensor will be stored under `/data`, find it there.
 
 Train model with:
 
-    python m2a_transformer.py --batch_size 10 --model_size small --path_to_dataset xxx_acc.pt
+    python m2a_transformer_w_chord.py --batch_size 10 --model_size small --path_to_dataset data/909correct_acc_cp4.pt --wandb
+    python m2a_transformer.py --batch_size 10 --model_size small --path_to_dataset data/909correct_acc_cp4.pt --wandb
 
 + `--model_size` can be either 'large' or 'small'.
 + `--path_to_dataset` passes tensor of the accompaniment (the model will automatically load the corresponding melody tensor at `xxx_mel.pt`).
@@ -85,7 +86,9 @@ For inference, place all the melody and accompaniment midi under the `/input` fo
 
 Run inferencen with:
 
-    python m2a_transformer_inference.py --model_path /path/to/ckpt --prompt_len 75 --n_samples 2 --temperature 1.0
+    python m2a_transformer_inference.py --model_path /home/coder/laopo/StreamMUSE/ckpt/m2a_transformer_chord_small_batch_20_schedule/m2a_transformer_chord_small_batch_20_schedule.epoch=00.val_loss=0.92533.ckpt --prompt_len 75 --n_samples 2 --temperature 1.0
+
+    python m2a_transformer_inference_w_chord.py --model_path /home/coder/laopo/StreamMUSE/ckpt/m2a_transformer_v0.2_chord_small_batch_20_schedule/m2a_transformer_v0.2_chord_small_batch_20_schedule.epoch=00.val_loss=0.73335.ckpt --prompt_len 75 --n_samples 2 --temperature 1.0
 
 + `--prompt_len` let you define the prompt_len.
 + `--n_samples` let you generate multiple output on one input.
