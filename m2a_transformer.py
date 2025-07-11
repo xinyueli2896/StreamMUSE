@@ -162,7 +162,7 @@ class RoFormerSymbolicTransformer(L.LightningModule):
                 if i % 10 == 0:
                     print('Sampling', i, '/', max_seq_len)
                 if i % 2 == 0:
-                    h_out = self.model(h, attention_mask=self.buffered_future_mask(h))[0]
+                    h_out = self.model(h, attention_mask=self.buffered_future_mask(h), interleave_pos=True)[0]
                     y_next = self.local_sampling(h_out[:, -1], max_subseq_len=subseq_len, temperature=temperature)
                     y.append(y_next)
                     b, s, l = y_next.unsqueeze(1).shape
@@ -177,7 +177,7 @@ class RoFormerSymbolicTransformer(L.LightningModule):
             for i in range(0, max_seq_len):
                 if i % 10 == 0:
                     print('Sampling', i, '/', max_seq_len)
-                h_out = self.model(h, attention_mask=self.buffered_future_mask(h))[0]
+                h_out = self.model(h, attention_mask=self.buffered_future_mask(h), interleave_pos=True)[0]
                 y_next = self.local_sampling(h_out[:, -1], max_subseq_len=subseq_len, temperature=temperature)
                 y.append(y_next)
                 b, s, l = y_next.unsqueeze(1).shape
@@ -257,7 +257,7 @@ class RoFormerSymbolicTransformer(L.LightningModule):
         h = torch.cat([sos, h[:, :-1]], dim=1)
 
         # print(h.shape)
-        h = self.model(h, attention_mask=self.buffered_future_mask(h))[0] ##all the sos of every timestep (considering other timestep)
+        h = self.model(h, attention_mask=self.buffered_future_mask(h), interleave_pos=True)[0] ##all the sos of every timestep (considering other timestep)
         return self.local_decode(h, emb)
 
 
@@ -359,11 +359,11 @@ class FramedDataset(IterableDataset):
 
     def __iter__(self):
         data = torch.load(self.file_path, weights_only=True) #伴奏
-        data_c = torch.load(self.file_path.replace('acc.pt', 'mel.pt'), weights_only=True) #旋律
+        data_c = torch.load(self.file_path.replace('acc', 'mel'), weights_only=True) #旋律
         pitch_shift_range = torch.load(self.file_path[:-3] + '.pitch_shift_range.pt', weights_only=True).reshape(-1, 2)
         pitch_shift_range[pitch_shift_range[:, 0] < -5, 0] = -5
         pitch_shift_range[pitch_shift_range[:, 1] > 6, 1] = 6
-        pitch_shift_range_c = torch.load(self.file_path.replace('acc.pt', 'mel.pt')[:-3] + '.pitch_shift_range.pt', weights_only=True).reshape(-1, 2)
+        pitch_shift_range_c = torch.load(self.file_path.replace('acc', 'mel')[:-3] + '.pitch_shift_range.pt', weights_only=True).reshape(-1, 2)
         pitch_shift_range_c[pitch_shift_range_c[:, 0] < -5, 0] = -5
         pitch_shift_range_c[pitch_shift_range_c[:, 1] > 6, 1] = 6
         if self.split == 'val':
@@ -377,7 +377,11 @@ class FramedDataset(IterableDataset):
                 batch_pitch_shift_range = pitch_shift_range[self.valid_indices[batch_indices]]
                 batch_pitch_shift_range_c = pitch_shift_range_c[self.valid_indices[batch_indices]]
                 raw_ids = self.valid_indices[batch_indices]
-                starts = torch.floor(torch.rand(len(raw_ids)) * (self.length[raw_ids] - self.target_length)).long() + self.start[raw_ids]
+                to_be_added = torch.floor(torch.rand(len(raw_ids)) * (self.length[raw_ids] - self.target_length)).long()
+                to_be_added -= to_be_added % 8
+                # print("-1", to_be_added%8)
+                starts = to_be_added + self.start[raw_ids] # 在每首歌的开始时间上 加上（整首歌的长度-target_length）
+                # starts = torch.floor(torch.rand(len(raw_ids)) * (self.length[raw_ids] - self.target_length)).long() + self.start[raw_ids]
                 index_matrix = torch.arange(self.target_length).view(1, -1) + starts.view(-1, 1)
                 minmax = torch.minimum(batch_pitch_shift_range_c[:, 1], batch_pitch_shift_range[:, 1])
                 maxmin = torch.maximum(batch_pitch_shift_range[:, 0], batch_pitch_shift_range_c[:, 0])
@@ -438,7 +442,7 @@ if __name__ == '__main__':
     assert model_size in ['small', 'large']
     n_gpus = max(torch.cuda.device_count(), 1)
 
-    default_name = f"m2a_transformer_nointerleavepos_{model_size}_batch_{batch_size * n_gpus}_schedule"
+    default_name = f"m2a_transformer_v0.3_{model_size}_batch_{batch_size * n_gpus}_schedule"
     model_name = args.model_name if args.model_name is not None else default_name
     net = RoFormerSymbolicTransformer(model_size == 'large')
     train_set_loader = DataLoader(FramedDataset(dataset, TRAIN_LENGTH, batch_size, split = 'train'), batch_size=None, num_workers=1, persistent_workers=True)

@@ -1,10 +1,10 @@
 __pycache__
-ckpt
+/ckpt_p
 lightning_logs
 tb_logs
 .idea
-/data
-/temp/
+/data_p
+/temp_p
 m2a_transformer_new.py
 cp_transformer.py
 /wandb

@@ -537,12 +537,14 @@ class RoFormerSymbolicTransformer(L.LightningModule):
         # x_mel, x_acc = self.preprocess(x_mel, pitch_shift, y = x_acc)
         # print(x_mel==x_acc)
         x_mel, x_acc, x_chord = self.preprocess(x_mel, pitch_shift, x_chord, chord_pitch_shift, y=x_acc)
-        # for i in range(x_mel.shape[0]):
-        #     decode_output(x_mel[i], f'samples/{i}_mel.mid')
-        #     decode_output(x_acc[i], f'samples/{i}_acc.mid')
-        #     chroma_to_midi(x_chord[i], f'samples/{i}_cho.mid', base_pitch=48)
+        print(x_mel.shape)
+        print(x_acc.shape)
+        for i in range(x_mel.shape[0]):
+            decode_output(x_mel[i], f'samples/{i}_mel.mid', single=True)
+            decode_output(x_acc[i], f'samples/{i}_acc.mid', single=True)
+            chroma_to_midi(x_chord[i], f'samples/{i}_cho.mid', base_pitch=48)
 
-        # pdb.set_trace()
+        pdb.set_trace()
         batch_size, seq_len, subseq_len = x_mel.shape # 10*384*8
         stacked = torch.stack([x_acc, x_mel], dim=2)
         x = stacked.view(batch_size, seq_len * 2, subseq_len)
@@ -624,7 +626,7 @@ class FramedDataset(IterableDataset):
         pitch_shift_range = torch.load(self.file_path[:-3] + '.pitch_shift_range.pt', weights_only=True).reshape(-1, 2)
         pitch_shift_range[pitch_shift_range[:, 0] < -5, 0] = -5
         pitch_shift_range[pitch_shift_range[:, 1] > 6, 1] = 6
-        pitch_shift_range_c = torch.load(self.file_path.replace('acc.pt', 'mel.pt')[:-3] + '.pitch_shift_range.pt', weights_only=True).reshape(-1, 2)
+        pitch_shift_range_c = torch.load(self.file_path.replace('acc', 'mel')[:-3] + '.pitch_shift_range.pt', weights_only=True).reshape(-1, 2)
         pitch_shift_range_c[pitch_shift_range_c[:, 0] < -5, 0] = -5
         pitch_shift_range_c[pitch_shift_range_c[:, 1] > 6, 1] = 6
         
@@ -647,6 +649,7 @@ class FramedDataset(IterableDataset):
                 to_be_added -= to_be_added % 8
                 # print("-1", to_be_added%8)
                 starts = to_be_added + self.start[raw_ids] # 在每首歌的开始时间上 加上（整首歌的长度-target_length）
+                print('starts', starts)
                 index_matrix = torch.arange(self.target_length).view(1, -1) + starts.view(-1, 1)
                 minmax = torch.minimum(batch_pitch_shift_range_c[:, 1], batch_pitch_shift_range[:, 1])
                 maxmin = torch.maximum(batch_pitch_shift_range[:, 0], batch_pitch_shift_range_c[:, 0])
@@ -714,7 +717,7 @@ if __name__ == '__main__':
     assert model_size in ['small', 'large']
     n_gpus = max(torch.cuda.device_count(), 1)
 
-    default_name = f"m2a_transformer_v0.3_chord_{model_size}_batch_{batch_size * n_gpus}_schedule"
+    default_name = f"m2a_transformer_v0.4_chord_{model_size}_batch_{batch_size * n_gpus}_schedule"
     model_name = args.model_name if args.model_name is not None else default_name
     net = RoFormerSymbolicTransformer(model_size == 'large')
     train_set_loader = DataLoader(FramedDataset(dataset, TRAIN_LENGTH, batch_size, split = 'train'), batch_size=None, num_workers=1, persistent_workers=True)
